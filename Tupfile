@@ -1,0 +1,5 @@
+# rx512 tupfile
+: foreach src/*v |> |>
+: src/rx512.v |> yosys -p "synth_ice40 -json %o" %f |> build/rx512.json
+: build/rx512.json |> nextpnr-ice40 --hx1k --package vq100 --json %f --pcf Go_Board_Constraints.pcf --asc %o |> build/rx512.asc
+: build/rx512.asc |> icepack %f %o |> build/rx512.bin
