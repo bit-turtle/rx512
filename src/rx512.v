@@ -13,30 +13,25 @@ module rx512 (
 	output o_LED_1,
 	output o_LED_2,
 	output o_LED_3,
-	output o_LED_4,
-	// 7-Segment Display
-	output o_Segment1_A,
-	output o_Segment1_B,
-	output o_Segment1_C,
-	output o_Segment1_D,
-	output o_Segment1_E,
-	output o_Segment1_F,
-	output o_Segment1_G,
-	output o_Segment2_A,
-	output o_Segment2_B,
-	output o_Segment2_C,
-	output o_Segment2_D,
-	output o_Segment2_E,
-	output o_Segment2_F,
-	output o_Segment2_G
+	output o_LED_4
 );
+	ClockDivider #(
+		.DIVISOR(25_000_000),
+		.BIT_WIDTH(32)
+	) clock1Hz (
+		.i_clock(i_clk),
+		.o_clock(o_LED_4)
+	);
 
 	SDHC card (
 		.i_clock25MHz(i_Clk),
-		.o_CS(io_PMOD_1),
-		.o_DO(io_PMOD_2),
-		.i_DI(io_PMOD_3),
-		.o_SCLK(io_PMOD_4)
+		.o_chipSelect(io_PMOD_1),
+		.o_dataOut(io_PMOD_2),
+		.i_dataIn(io_PMOD_3),
+		.o_clock(io_PMOD_4),
+		.o_initStatus(o_LED_1),
+		.o_cardBusy(o_LED_2),
+		.o_debug(o_LED_3)
 	);
 
 endmodule
