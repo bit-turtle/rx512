@@ -8,7 +8,7 @@ module ClockDivider #(
 	parameter BIT_WIDTH = 8
 ) (
 	input i_clock,
-	output reg o_clock
+	output reg o_clock = 1'b0
 );
 
 	// Counter

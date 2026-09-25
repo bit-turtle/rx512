@@ -1,5 +1,6 @@
 // Top Level Module
 
+`include "clkdiv.v"
 `include "sdhc.v"
 
 module rx512 (
@@ -15,14 +16,7 @@ module rx512 (
 	output o_LED_3,
 	output o_LED_4
 );
-	ClockDivider #(
-		.DIVISOR(25_000_000),
-		.BIT_WIDTH(32)
-	) clock1Hz (
-		.i_clock(i_clk),
-		.o_clock(o_LED_4)
-	);
-
+	
 	SDHC card (
 		.i_clock25MHz(i_Clk),
 		.o_chipSelect(io_PMOD_1),

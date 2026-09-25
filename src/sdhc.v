@@ -10,7 +10,7 @@ module SDHC (
 	output o_clock,
 	output reg o_initStatus = 1'b1,
 	output o_cardBusy,
-	output o_debug
+	output reg o_debug = 1'b0
 );
 	// SPI Clock
 	wire w_clock;
@@ -22,26 +22,26 @@ module SDHC (
 		.DIVISOR(250),
 		.BIT_WIDTH(8)
 	) clock100kHz (
-		.i_clock(i_clock),
+		.i_clock(i_clock25MHz),
 		.o_clock(w_clock100kHz)
 	);
 	// Uses 25MHz only after initialization
 	assign w_clock = r_fullSpeed ? i_clock25MHz : w_clock100kHz;
 	// Only outputs the clock when the clock is enabled
 	assign o_clock = r_clockEnable ? w_clock : 1'b0;
-	assign o_debug = w_clock;
 
 	// Command State
-	parameter c_CMD_IDLE = 2'b00;
-	parameter c_CMD_SEND = 2'b01;
-	parameter c_CMD_WAIT = 2'b10;
-	parameter c_CMD_RESP = 2'b11;
+	parameter c_CMD_IDLE = 3'b000;
+	parameter c_CMD_SEND = 3'b001;
+	parameter c_CMD_WAIT = 3'b010;
+	parameter c_CMD_RESP = 3'b011;
+	parameter c_CMD_BUSY = 3'b100;
 	// Response Lengths
 	parameter c_RESPONSE_R1 = 7;
 	parameter c_RESPONSE_R3 = 39;
 	parameter c_RESPONSE_R7 = 39;
 	// Command Registers
-	reg [1:0] r_cmdState = c_CMD_IDLE;
+	reg [2:0] r_cmdState = c_CMD_IDLE;
 	reg [47:0] r_command = 0;	// 6 byte command to send
 	reg [5:0] r_responseLength = 7;	// Expected response length -1
 	reg [38:0] r_response = 0;
@@ -62,9 +62,16 @@ module SDHC (
 	reg [2:0] r_initState = c_INIT_WAIT;
 	reg [1:0] r_initFlag = 2'b00;
 
-	// Command Update
+	// Data Update
+	reg r_dataIn = 1'b1;
 	always @(posedge w_clock)
 	begin
+		r_dataIn <= i_dataIn;
+	end
+	// Command Update
+	always @(negedge w_clock)
+	begin
+		// State machine
 		case (r_cmdState)
 			c_CMD_IDLE : begin
 				// Initalization
@@ -73,13 +80,15 @@ module SDHC (
 						// Wait for 512 clock cycles
 						r_counter <= r_counter + 1;
 						r_initState <= (r_counter == 511) ? c_INIT_DCLK : c_INIT_WAIT;
+						o_chipSelect <= 1'b0;
 					end
 					c_INIT_DCLK : begin
 						// Dummy clock for 512 clock cycles
 						r_counter <= r_counter + 1;
-						r_initState <= (r_counter + 1 == 0) ? c_INIT_CMD0 : c_INIT_DCLK;
-						o_dataOut <= (r_counter + 1 == 0) ? 1'b0 : 1'b1;
-						r_clockEnable <= (r_counter + 1) ? 1'b0 : 1'b1;
+						r_initState <= (r_counter == 511) ? c_INIT_CMD0 : c_INIT_DCLK;
+						o_dataOut <= (r_counter == 511) ? 1'b0 : 1'b1;
+						r_clockEnable <= (r_counter == 511) ? 1'b0 : 1'b1;
+						o_chipSelect <= 1'b1;
 					end
 					c_INIT_CMD0 : begin
 						// Keeps attemping CMD0 until there is no error
@@ -98,6 +107,7 @@ module SDHC (
 						r_initState <= (r_initFlag) ? (
 							(r_response == 0) ? c_INIT_SDHC : c_INIT_SDSC
 						) : c_INIT_CMD8;
+						o_debug <= 1'b1;
 					end
 					c_INIT_SDSC : begin
 						// Keeps Attempting ACMD41 until there is no error
@@ -140,26 +150,39 @@ module SDHC (
 			c_CMD_SEND : begin
 				r_counter <= (r_counter >= 47) ? 0 : r_counter + 1;
 				r_cmdState <= (r_counter >= 47) ? c_CMD_WAIT : c_CMD_SEND;
-				o_dataOut <= r_command[r_counter];
+				o_dataOut <= r_command[47 - r_counter];
 				r_clockEnable <= 1'b1;
 			end
 			c_CMD_WAIT : begin
 				// Time out after 512 clock cycles, when r_counter wraps around
 				r_counter <= r_counter + 1;
-				r_cmdState <= (i_dataIn == 0) ? c_CMD_RESP : ( (r_counter + 1 == 0) ? c_CMD_IDLE : c_CMD_WAIT);
-				r_response <= (r_counter + 1 == 0) ? 39'hffffff : 39'h000000;	// Resets r_response and sets to 1 on timeout
+				r_cmdState <= (i_dataIn == 1'b0) ? c_CMD_RESP : ( (r_counter == 511) ? c_CMD_IDLE : c_CMD_WAIT);
+				r_response <= (r_counter == 511) ? 39'hffffff : 39'h000000;	// Resets r_response and sets to 1 on timeout
 				o_dataOut <= 1'b1;	// Dummy bytes
 				r_clockEnable <= 1'b1;
 			end
 			c_CMD_RESP : begin
 				// Read response length bit response
 				r_counter <= (r_counter >= r_responseLength) ? 0 : r_counter + 1;
-				r_cmdState <= (r_counter >= r_responseLength) ? c_CMD_IDLE : c_CMD_RESP;
-				r_response[r_counter] <= i_dataIn;
+				r_cmdState <= (r_counter >= r_responseLength) ? c_CMD_BUSY : c_CMD_RESP;
+				r_response[r_counter] <= r_dataIn;
 				r_clockEnable <= (r_counter >= r_responseLength) ? 1'b1 : 1'b0;
 			end
+			c_CMD_BUSY : begin
+				// Time out after 512 clock cycles, when r_counter wraps around
+				r_counter <= r_counter + 1;
+				r_cmdState <= (i_dataIn == 1'b1) ? c_CMD_RESP : ( (r_counter == 511) ? c_CMD_IDLE : c_CMD_BUSY);
+				r_response <= (r_counter == 511) ? 39'hffffff : 39'h000000;	// Resets r_response and sets to 1 on timeout
+				o_dataOut <= 1'b1;	// Dummy bytes
+				r_clockEnable <= 1'b1;
+			end
 		endcase
-
+		// Reset if no card is connected
+		if (i_dataIn == 1'bz) begin
+			r_cmdState <= c_CMD_IDLE;
+			o_initStatus <= 1'b1;
+			r_initState <= c_INIT_WAIT;	
+		end
 	end
 
 endmodule
