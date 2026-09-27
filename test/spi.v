@@ -36,6 +36,8 @@ module test;
 		#410 command = spi.s_IDLE;
 		#800 command = spi.s_READ;
 		#2000 command = spi.s_HOLD;
+		#6000 command = spi.s_SEND;
+		#6040 command = spi.s_READ;
 
 		#10000 $finish;
 	end

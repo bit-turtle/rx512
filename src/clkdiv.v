@@ -15,13 +15,13 @@ module ClockDivider #(
 	reg [BIT_WIDTH-1:0] r_counter = 0;
 
 	// Count and toggle on 0
-	always @(posedge i_clock) begin
+	always @(negedge i_clock) begin
 		if (r_counter == DIVISOR-1) begin
-			r_counter = 0;
+			r_counter <= 0;
 			o_clock = ~o_clock;
 		end
 		else begin
-			r_counter = r_counter + 1;
+			r_counter <= r_counter + 1;
 			o_clock = o_clock;
 		end
 	end
