@@ -11,10 +11,13 @@ module SDHC (
 	input i_dataIn,
 	output o_clockSDHC,
 	// SDHC commands
-	input i_command,
+	input [2:0] i_command,
+	input [47:0] i_frame,
 	output o_busy,
+	// Data packet transfer
 	input [7:0] i_byte,
-	output reg o_address,
+	output reg [7:0] o_byte,
+	output reg [8:0] o_index,
 );
 
 	// 100 kHz clock for SDHC card initialization, updates on negedge
@@ -41,8 +44,22 @@ module SDHC (
 	);
 
 	// SDHC command states
-	parameter s_IDLE = 4'h0;
-	parameter s_HOLD = 4'h1;
+	parameter s_IDLE = 4'h0;	// Accept new commands
+	parameter s_WAIT = 4'h1;	// Wait for 512 clock cycles
+	parameter s_HOLD = 4'h2;	// Hold chipSelect and dataOut high
+	parameter s_CMD_SEND = 4'h3;	// Send the command
+	parameter s_CMD_WAIT = 4'h4;	// Wait for the command response
+	parameter s_CMD_RESP = 4'h5;	// Read the command response
+	parameter s_SEND_WAIT = 4'h6;	// Wait for one byte before sending the data packet
+	parameter s_SEND_TK24 = 4'h7;	// Send the data packet token for CMD24
+	parameter s_SEND_DATA = 4'h8;	// Input and send the 512 byte sector
+	parameter s_SEND_CRC0 = 4'h9;	// Send a blank CRC to finish up the data packet
+	parameter s_SEND_RESP = 4'hA;	// Read the data response to verify everything went smoothly
+	parameter s_SEND_BUSY = 4'hB;	// Wait for the SD card to finish the write
+	parameter s_RECV_WAIT = 4'hC;	// Wait for as many bytes as it takes for the card to be ready
+	parameter s_RECV_TK17 = 4'hD;	// Receive data packet token, should be the CMD17 token
+	parameter s_RECV_DATA = 4'hE;	// Receive the data for the 512 byte sector and output it
+	parameter s_RECV_CRC0 = 4'hF;	// Receive CRC for data packet, and ignore it
 	reg r_state = s_IDLE;
 	// SDHC state machine, updates on posedge
 	always @(posedge i_clock)
@@ -54,6 +71,7 @@ module SDHC (
 				s_IDLE : begin
 				end
 				// Hold
+				s_HOLD
 			endcase
 		end
 	end

@@ -46,7 +46,7 @@ module SPI (
 			// Enable the clock early for reads so the data will be ready sooner
 			r_clockEnable <= (i_command == s_READ) ? 1'b1 : 1'b0;
 			o_chipSelect <= (i_command != s_HOLD && i_command != s_IDLE) ? 1'b0 : o_chipSelect;
-			o_dataOut <= 1'b0;
+			o_dataOut <= (i_command != s_HOLD && i_command != s_IDLE) ? 1'b0 : o_dataOut;
 			r_counter <= 0;
 			r_state <= i_command;
 		end
